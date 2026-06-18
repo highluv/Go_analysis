@@ -1,0 +1,67 @@
+# ============================================================================
+#  SERVICE'ы - адерсуемость. По одному на каждый workload.
+#
+#  На что смотреть:
+#   - spec.selector — набор меток, которые сервис ищет у подов. Матч этих
+#     меток с template-labels пода и есть `service_workload_match` (этап 1.4).
+#     Здесь селекторы точечные (app: <name>) => каждый сервис матчит ровно
+#     один workload.
+#   - имя порта (name: http) — Istio по имени/appProtocol определяет L7-протокол.
+#     с явной семантикой порта.
+#
+#  Намеренно НЕ делаем selectorless-сервис здесь (он есть в плане как
+#  негативный кейс I12) — для базового оракула держим чистую цепочку
+#  Service -> selector -> workload. Selectorless можно добавить отдельной
+#  фикстурой, когда будете проверять инвариант I12.
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: shop
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: shop
+spec:
+  selector:
+    app: orders
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments
+  namespace: shop
+spec:
+  selector:
+    app: payments
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics
+  namespace: external
+spec:
+  selector:
+    app: analytics
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

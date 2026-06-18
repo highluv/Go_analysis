@@ -1,0 +1,70 @@
+# ============================================================================
+#  AuthorizationPolicy — слой авторизации. ЗДЕСЬ И РОЖДАЮТСЯ ОГРАНИЧЕНИЯ,
+#  то есть собственно рёбра ACG.
+#
+#  Как читать политику (поля, на которые смотрит анализатор):
+#   - spec.selector.matchLabels — к каким workload'ам ПРИМЕНЯЕТСЯ политика
+#     (это DESTINATION). Нет selector => вся namespace.
+#   - action: ALLOW | DENY | CUSTOM. У нас только ALLOW.
+#   - rules[].from[].source.principals / namespaces — кому РАЗРЕШЕНО (SOURCE).
+#
+#  Семантика И/ИЛИ:
+#   - несколько principals в ОДНОМ списке  => ИЛИ (любой из них подходит);
+#   - разные поля внутри одного source (principals И namespaces) => И;
+#   - несколько записей from[] => ИЛИ;
+#   - несколько rules / несколько политик => ИЛИ.
+#
+#  DEFAULT-DENY:
+#   как только к workload применён ХОТЯ БЫ ОДИН ALLOW — разрешено только
+#   то, что попало в ALLOW; всё остальное запрещено. Если ALLOW-политик у
+#   workload НЕТ вовсе — разрешено всё. Поэтому у frontend НИЖЕ намеренно
+#   НЕТ политики: это проверка ветки default-allow.
+# ============================================================================
+
+# --- payments: разрешаем ТОЛЬКО orders ---------------------------------------
+# Ожидаемые следствия оракула:
+#   orders   -> payments  = РАЗРЕШЕНО (principal совпал)
+#   frontend -> payments  = ЗАПРЕЩЕНО (есть ALLOW, но principal не совпал
+#                                       => default-deny)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: payments-allow-orders
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: payments          # destination = workload payments
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/shop/sa/orders-sa
+---
+# --- orders: разрешаем frontend (тот же ns) И analytics (кросс-ns) ------------
+# Два principal в ОДНОМ списке => ИЛИ: подходит любой из двух.
+# Ожидаемые следствия оракула:
+#   frontend             -> orders = РАЗРЕШЕНО
+#   analytics (external) -> orders = РАЗРЕШЕНО (кросс-namespace principal)
+#   payments             -> orders = ЗАПРЕЩЕНО (не в списке => default-deny)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: orders-allow-frontend-analytics
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: orders
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/shop/sa/frontend-sa
+              - cluster.local/ns/external/sa/analytics-sa
+
+# --- frontend: ПОЛИТИКИ НЕТ намеренно ----------------------------------------
+# Отсутствие ALLOW => к frontend разрешено всё (любой -> frontend = РАЗРЕШЕНО).
+# Это и есть проверяемая ветка default-allow. Не добавлять сюда политику.

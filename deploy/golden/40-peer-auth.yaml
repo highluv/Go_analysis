@@ -1,0 +1,33 @@
+# ============================================================================
+#  PeerAuthentication — транспортный слой (mTLS).
+#
+#  План фиксирует упрощение MVP: mTLS считаем всегда STRICT. Чтобы фикстура
+#  была СОГЛАСОВАНА с этим допущением (а не зависела от дефолтов установки
+#  Istio), задаём STRICT явно, по одному объекту на каждый golden-namespace.
+#
+#  Как читать: name "default" + отсутствие selector => политика действует на
+#  ВЕСЬ namespace. mode STRICT => sidecar принимает только mTLS-трафик.
+#  На анализатор (вне mesh, без sidecar) это не влияет — PeerAuthentication
+#  работает только для подов с sidecar.
+#
+#  Альтернатива — один mesh-wide объект в root-namespace (istio-system),
+#  name "default". Мы выбрали per-namespace: меньше blast radius, фикстура
+#  самодостаточна и читается локально (вся истина про shop лежит в shop).
+# ============================================================================
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: shop
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: external
+spec:
+  mtls:
+    mode: STRICT
