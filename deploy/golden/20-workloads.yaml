@@ -1,0 +1,122 @@
+# ============================================================================
+#  WORKLOAD'ы (Deployment'ы). Базовая единица анализа.
+#
+#  На что смотреть в каждом Deployment'е — три вещи, важные для анализатора:
+#   1) spec.template.metadata.labels  — ИМЕННО эти метки сопоставляет
+#      Service-селектор (селектор матчится с labels ПОДА
+#      берущимися из template контроллера, а не с labels самого Deployment'а).
+#   2) spec.template.spec.serviceAccountName — identity источника (см. SA-файл).
+#   3) тип ресурса — Deployment/StatefulSet/DaemonSet считается workload'ом
+#      (бэрные Pod'ы и Job/CronJob — вне модели MVP).
+#
+#  Контейнер — busybox, чисто чтобы под был Running/Ready и Service имел
+#  endpoints. Содержимое неважно (golden — оракул конфигурации).
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: shop
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend           # <-- по этой метке матчит Service frontend
+    spec:
+      serviceAccountName: frontend-sa   # <-- identity источника
+      containers:
+        - name: app
+          image: busybox:latest 
+          ports:
+            - containerPort: 80
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits:   { cpu: "100m", memory: "64Mi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: shop
+  labels:
+    app: orders
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      serviceAccountName: orders-sa
+      containers:
+        - name: app
+          image: busybox:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits:   { cpu: "100m", memory: "64Mi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments
+  namespace: shop
+  labels:
+    app: payments
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payments
+  template:
+    metadata:
+      labels:
+        app: payments
+    spec:
+      serviceAccountName: payments-sa
+      containers:
+        - name: app
+          image: busybox:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits:   { cpu: "100m", memory: "64Mi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+  namespace: external          # <-- другой namespace: проверка кросс-ns
+  labels:
+    app: analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics
+  template:
+    metadata:
+      labels:
+        app: analytics
+    spec:
+      serviceAccountName: analytics-sa
+      containers:
+        - name: app
+          image: busybox:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits:   { cpu: "100m", memory: "64Mi" }
+

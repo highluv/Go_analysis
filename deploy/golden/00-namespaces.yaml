@@ -1,0 +1,30 @@
+# ============================================================================
+#  эти namespace'ы — В MESH:
+#  istio-injection: enabled => каждый под получает sidecar, на него действуют
+#  PeerAuthentication (mTLS) и AuthorizationPolicy. Именно эту конфигурацию
+#  система-анализатор и читает.
+#
+#  КЛЮЧЕВАЯ МЫСЛЬ: golden — это оракул КОНФИГУРАЦИИ, а не трафика.
+#  Анализатор НЕ шлёт пакеты между shop/external — он читает манифесты и
+#  вычисляет, что РАЗРЕШЕНО. Поэтому контейнеры могут быть любыми (хоть
+#  nginx, который ничего осмысленного не отвечает) — на результат анализа
+#  это не влияет. Важны метки, ServiceAccount'ы и Istio-политики, а не
+#  бизнес-логика подов.
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    istio-injection: enabled    # <-- включаем инжект sidecar в этот namespace.
+    # Альтернатива (revision-based, для канареечных апгрейдов Istio):
+    #   istio.io/rev: <revision>
+    # Классическая метка istio-injection=enabled работает с дефолтной
+    # ревизией и для курсовой проще.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external
+  labels:
+    istio-injection: enabled
