@@ -1,10 +1,10 @@
 -- 00001_snapshot_and_raw.sql
--- Слой snapshot / raw. Поддерживает этапы 1.1 (collect) и 1.2 (хранение S3 + ссылка в БД).
--- Инварианты: I1 (snapshot — граница консистентности), I3 (нет дублей raw в snapshot).
+-- Слой snapshot / raw. Поддерживает collect и хранение S3 + ссылка в БД.
+-- Инварианты: snapshot — граница консистентности, нет дублей raw в snapshot
 
 -- +goose Up
 
--- Снимок состояния ВСЕГО кластера в момент времени. Граница консистентности (I1).
+-- Снимок состояния ВСЕГО кластера в момент времени. Граница консистентности.
 CREATE TABLE snapshot (
     snapshot_id  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name         varchar(100) NOT NULL,
