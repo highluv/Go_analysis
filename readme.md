@@ -322,6 +322,35 @@ REST/JSON. Минус формата — не лучший вариант для
 
 ---
 
+## 14. Структура репозитория
+
+```text
+cmd/
+  acg/                 # main.go основного Go-бинаря
+internal/
+  app/                 # use case'ы и orchestration
+  config/              # чтение конфигурации
+  domain/              # доменная модель ACG
+  k8s/                 # read-only Kubernetes/Istio adapter
+  storage/
+    postgres/          # PostgreSQL repositories
+    minio/             # S3/MinIO raw storage
+  collector/           # collect snapshot
+  normalizer/          # raw -> normalized
+  addressability/      # service -> workload matching
+  policy/              # Istio policy semantics + identity expansion
+  analyzer/            # allowed edges + evidence
+  httpapi/             # REST API
+  testkit/             # helpers для тестов
+deploy/
+  infra/               # PostgreSQL + MinIO + текущий Istio demo manifest
+  golden/              # эталонный Kubernetes/Istio cluster fixture
+migrations/            # goose SQL migrations
+```
+
+Главное правило: `cmd` запускает приложение, `internal` реализует продукт, `deploy` поднимает окружение, `migrations` задаёт схему PostgreSQL. Подробные README лежат в каждой папке и фиксируют, что туда класть и с чем этот слой связан.
+
+---
 ## Глоссарий
 
 - **ACG (Allowed Connectivity Graph)** — граф разрешённых межсервисных взаимодействий.
@@ -332,4 +361,3 @@ REST/JSON. Минус формата — не лучший вариант для
 - **Snapshot** — зафиксированное состояние всего кластера, граница консистентности.
 - **analysis_run** — запуск вычисления для выбранной области поверх snapshot.
 - **Identity expansion** — раскрытие source-identity (principals/namespaces) в реальные source-workload’ы.
-

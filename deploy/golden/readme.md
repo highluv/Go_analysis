@@ -1,61 +1,50 @@
-# deploy/ — манифесты окружения
+# deploy/golden
 
-Два независимых пакета. Применяются одной командой каждый (kustomize сам
-ставит Namespace раньше остальных ресурсов).
+Golden-кластер в mesh: тестовый оракул для интеграционных проверок.
 
-## Инфраструктура анализатора (вне mesh)
+Эта папка описывает не инфраструктуру анализатора, а Kubernetes/Istio-объекты, которые анализатор должен прочитать и превратить в ожидаемый граф.
 
-```bash
-kubectl apply -k deploy/infra
+## Файлы
+
+```text
+00-namespaces.yaml       # shop, external с istio-injection=enabled
+10-serviceaccounts.yaml  # service accounts workload'ов
+20-workloads.yaml        # Deployment: frontend, orders, payments, analytics
+30-services.yaml         # Service по одному на каждый workload
+40-peer-auth.yaml        # PeerAuthentication STRICT
+50-auth-policies.yaml    # AuthorizationPolicy, рождающие ограничения
+kustomization.yaml       # пакет golden
 ```
 
-Поднимает в namespace `acg-system`:
-- **PostgreSQL** (`postgres.acg-system:5432`) — нормализованный + derived слои;
-- **MinIO** (`minio.acg-system:9000` S3, `:9001` консоль) — raw-манифесты.
-
-Оба на `emptyDir` => **данные не переживают рестарт пода** (требование плана).
-Bucket `acg-raw` создаёт приложение на старте (идемпотентно); опциональный
-`mc`-Job лежит в `50-minio-bucket-job.yaml` и по умолчанию не применяется.
-
-Проверка:
-```bash
-kubectl -n acg-system get pods,svc
-kubectl -n acg-system port-forward svc/minio 9001:9001   # консоль в браузере
-```
-
-## Golden-кластер (в mesh) — тестовый оракул
+## Применение
 
 ```bash
 kubectl apply -k deploy/golden
 ```
 
-namespace'ы `shop` и `external` с `istio-injection: enabled`. После применения
-у подов должно быть **2/2 контейнера** (приложение + istio-proxy):
+namespace'ы `shop` и `external` с `istio-injection: enabled`. После применения у pod'ов должно быть **2/2 контейнера**: приложение + `istio-proxy`.
 
 ```bash
 kubectl -n shop get pods          # READY должно быть 2/2
 ```
 
-### Таблица истины (оракул для тестов 1.1–2.4)
+## Таблица истины
 
-| Source → Destination          | Разрешено | Почему                                   |
+| Source -> Destination          | Разрешено | Почему                                   |
 | ----------------------------- | --------- | ---------------------------------------- |
-| orders → payments             | да        | principal orders-sa в ALLOW              |
-| frontend → payments           | нет       | есть ALLOW, principal не совпал → deny   |
-| frontend → orders             | да        | principal frontend-sa в ALLOW            |
-| analytics (external) → orders | да        | кросс-namespace principal в ALLOW        |
-| любой → frontend              | да        | у frontend нет ALLOW → разрешено всё     |
+| orders -> payments             | да        | principal orders-sa в ALLOW              |
+| frontend -> payments           | нет       | есть ALLOW, principal не совпал -> deny  |
+| frontend -> orders             | да        | principal frontend-sa в ALLOW            |
+| analytics (external) -> orders | да        | кросс-namespace principal в ALLOW        |
+| любой -> frontend              | да        | у frontend нет ALLOW -> разрешено всё    |
 
-Эту таблицу интеграционные тесты сравнивают с тем, что насчитал анализатор.
+Эту таблицу интеграционные тесты должны сравнивать с тем, что насчитал `internal/analyzer`.
 
-## Удаление
+## Связь с этапами
 
-```bash
-kubectl delete -k deploy/golden
-kubectl delete -k deploy/infra
-```
-
-## Зависимости окружения (НЕ в этих манифестах)
-- k3d-кластер с установленным Istio (ingress/egress, sidecar injector);
-- read-only RBAC ServiceAccount для анализатора — отдельный пакет
-  (`deploy/rbac`, следующий шаг).
+- 1.1 collect проверяет, что все raw-объекты собраны.
+- 1.3 normalize проверяет разбор namespace/workload/service/service account.
+- 1.4 addressability проверяет `service -> workload`.
+- 2.1 normalize policy проверяет AuthorizationPolicy и PeerAuthentication.
+- 2.2 identity expansion проверяет principals и кросс-namespace.
+- 2.3 analyzer проверяет итоговые edges + evidence.
