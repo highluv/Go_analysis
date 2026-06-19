@@ -1,0 +1,22 @@
+# ============================================================================
+#  kustomization собирает набор манифестов в один «пакет».
+#  Применение ОДНОЙ командой:   kubectl apply -k deploy/infra
+#
+#  Зачем kustomize, а не просто `kubectl apply -f dir/`:
+#   - kustomize применяет ресурсы в правильном порядке (Namespace раньше
+#     namespaced-объектов), `apply -f` так не гарантирует и может упасть
+#     на «namespace not found» при первом проходе;
+#   - один источник правды для namespace/labels/имён, легко делать оверлеи
+#     (dev/test/prod) поверх базы.
+#
+#  Job создания bucket НЕ включён намеренно (см. 50-...): bucket делает
+#  приложение на старте.
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespace.yaml
+  - 10-postgres-secret.yaml
+  - 20-postgres.yaml
+  - 30-minio-secret.yaml
+  - 40-minio.yaml

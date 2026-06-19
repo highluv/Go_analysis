@@ -1,0 +1,23 @@
+# ============================================================================
+#  Namespace для собственной инфраструктуры анализатора (Postgres, MinIO,
+#  позже — само приложение).
+#
+#  КЛЮЧЕВОЕ РЕШЕНИЕ: здесь НЕТ метки istio-injection.
+#  Поды Postgres/MinIO/анализатора НЕ получают sidecar и не входят в mesh.
+#  Почему так:
+#   - анализатор читает Kubernetes API (control-plane), он НЕ шлёт
+#     прикладной трафик в shop/external, поэтому ему mesh не нужен;
+#   - если бы Postgres/MinIO попали под STRICT mTLS из PeerAuthentication,
+#     их клиентские соединения завязались бы на политику mesh — лишняя
+#     связанность и источник трудноуловимых ошибок «соединение режется
+#     sidecar'ом». Инфру держим вне mesh намеренно.
+#  (PeerAuthentication действует ТОЛЬКО на поды с sidecar, поэтому даже
+#   mesh-wide STRICT эти поды не затронет.)
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acg-system
+  labels:
+    app.kubernetes.io/part-of: acg
+    # istio-injection НЕ задаём => sidecar не инжектится.

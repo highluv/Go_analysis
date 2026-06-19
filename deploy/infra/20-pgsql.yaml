@@ -1,0 +1,112 @@
+# ============================================================================
+#  PostgreSQL — нормализованный и derived слои данных.
+#
+#  ГЛАВНОЕ ПРОЕКТНОЕ ТРЕБОВАНИЕ:
+#  данные НЕ должны переживать рестарт пода => используем emptyDir,
+#  а НЕ PersistentVolumeClaim. emptyDir живёт ровно столько, сколько живёт
+#  под; пересоздался под — данные чистые. Это ровно то, что нужно для
+#  воспроизводимого тестового окружения: каждый прогон начинается «с нуля».
+#  Собственно, это для экономии места на тестовом стенде.
+#
+#  Если позже захотите персистентность — заменить emptyDir на PVC
+#  (см. блок volumes ниже, там альтернатива в комментарии).
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: acg-system
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: acg
+spec:
+  replicas: 1                 # БД — одна реплика. Реплики Deployment'а делить
+                              # бы один emptyDir НЕ могли (у каждого пода свой),
+                              # и получилось бы N независимых БД. Для stateful
+                              # «по-взрослому» берут StatefulSet; нам не нужно.
+  strategy:
+    type: Recreate            # НЕ RollingUpdate: при апдейте сначала гасим
+                              # старый под, потом поднимаем новый. Иначе два
+                              # пода Postgres пытались бы стартовать
+                              # одновременно (хоть и на разных emptyDir) —
+                              # лишний шум. Recreate = чистая смена.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres-credentials   # POSTGRES_USER/PASSWORD/DB
+          # POSTGRES_* читаются entrypoint'ом официального образа при ПЕРВОМ
+          # старте (initdb). На emptyDir каждый старт пода — «первый».
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+              # Кладём данные в ПОДкаталог тома, а не в корень mount-point.
+              # На emptyDir это не критично, но на PVC обязательно: у PVC
+              # в корне появляется lost+found, и initdb падает с «directory
+              # not empty». Привычка класть в подкаталог избавляет от грабель
+              # при будущем переезде на PVC.
+          # --- Пробы: как k8s понимает, что БД жива и готова ---
+          readinessProbe:
+            # readiness = «можно слать трафик». Пока не готов — Service не
+            # включит этот под в endpoints. pg_isready проверяет, что Postgres
+            # принимает соединения.
+            exec:
+              command: ["pg_isready", "-U", "acg", "-d", "acg"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            # liveness = «жив ли вообще». Провалится — k8s перезапустит под.
+            # Держим мягче readiness, чтобы не перезапускать БД из-за разовой
+            # заминки.
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            # requests — сколько гарантированно резервируется (влияет на
+            # планирование пода на ноду). limits — потолок (превышение CPU =
+            # троттлинг, превышение memory = OOMKill). Для k3d-локалки скромно.
+            requests: { cpu: "50m",  memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "256Mi" }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          emptyDir: {}        # <-- эфемерно. Альтернатива (персистентно):
+          # persistentVolumeClaim:
+          #   claimName: postgres-pvc
+---
+# ----------------------------------------------------------------------------
+#  Service — стабильное DNS-имя для Postgres внутри кластера.
+#  Приложение коннектится по host = postgres.acg-system.svc.cluster.local:5432
+#  (или коротко postgres.acg-system). Pod IP меняется при пересоздании —
+#  Service даёт постоянную точку входа.
+# ----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: acg-system
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  type: ClusterIP            # только внутри кластера, наружу не торчит.
+  selector:
+    app.kubernetes.io/name: postgres   # связывает Service с подами по метке.
+  ports:
+    - name: postgres
+      port: 5432             # порт Service
+      targetPort: 5432       # порт контейнера

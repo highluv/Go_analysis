@@ -1,0 +1,40 @@
+# ============================================================================
+#  ОПЦИОНАЛЬНО / АЛЬТЕРНАТИВА. По умолчанию НЕ применяется (нет в
+#  kustomization.yaml). Bucket лучше создавать из приложения на старте.
+#  Этот Job показан как образец «императивной» инициализации хранилища.
+#
+#  Job ≠ Deployment: Job запускает под, ждёт успешного завершения (Completed)
+#  и больше не перезапускает. Подходит для одноразовых задач.
+#
+#  Минус именно здесь: данные MinIO эфемерны, после рестарта MinIO bucket
+#  исчезнет, а Job уже отработал и не запустится снова сам. Поэтому в
+#  эфемерной схеме идемпотентная проверка из приложения надёжнее.
+# ============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-create-bucket
+  namespace: acg-system
+spec:
+  backoffLimit: 5            # сколько раз ретраить при падении
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+          envFrom:
+            - secretRef:
+                name: minio-credentials
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              # Ждём, пока MinIO поднимется, затем настраиваем alias и создаём
+              # bucket с флагом --ignore-existing (идемпотентность).
+              until mc alias set local http://minio:9000 \
+                    "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                echo "waiting for minio..."; sleep 2;
+              done
+              mc mb --ignore-existing local/acg-raw
+              echo "bucket acg-raw ready"

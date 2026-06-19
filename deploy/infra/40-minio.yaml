@@ -1,0 +1,95 @@
+# ============================================================================
+#  MinIO — S3-совместимое объектное хранилище для raw-манифестов (immutable).
+#
+#  То же требование эфемерности: emptyDir, данные не переживают рестарт.
+#  Следствие, которое надо держать в голове: bucket тоже исчезает при
+#  рестарте. Поэтому приложение ОБЯЗАНО на старте делать
+#  «create-bucket-if-not-exists» (идемпотентно). Это правильнее, чем создавать
+#  bucket манифестом — логика хранилища живёт в коде, под контролем тестов.
+#  Альтернатива: Job с `mc mb` (см. файл 50-minio-bucket-job.yaml) — оставлен
+#  как пример, но в основном пути не нужен.
+#
+#  Порты MinIO:
+#   - 9000 — S3 API (с ним работает приложение по AWS SDK / minio-go);
+#   - 9001 — веб-консоль (удобно глазами проверить, что объект лёг).
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: acg-system
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: acg
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          # MinIO версионируется датой релиза, тега :latest у них по сути нет
+          # для прод-использования — пинуйте конкретный RELEASE и при желании
+          # сверьте актуальный на min.io/download.
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          envFrom:
+            - secretRef:
+                name: minio-credentials
+          readinessProbe:
+            # У MinIO есть готовые health-эндпойнты — не надо изобретать.
+            httpGet:
+              path: /minio/health/ready
+              port: s3
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "50m",  memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}        # эфемерно (см. комментарий выше)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: acg-system
+  labels:
+    app.kubernetes.io/name: minio
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
