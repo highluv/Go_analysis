@@ -32,9 +32,10 @@ spec:
       serviceAccountName: frontend-sa   # <-- identity источника
       containers:
         - name: app
-          image: busybox:latest 
+          image: wbitt/network-multitool:latest
           ports:
             - containerPort: 80
+              name: http
           resources:
             requests: { cpu: "10m", memory: "32Mi" }
             limits:   { cpu: "100m", memory: "64Mi" }
@@ -59,9 +60,10 @@ spec:
       serviceAccountName: orders-sa
       containers:
         - name: app
-          image: busybox:latest
+          image: wbitt/network-multitool:latest
           ports:
             - containerPort: 80
+              name: http
           resources:
             requests: { cpu: "10m", memory: "32Mi" }
             limits:   { cpu: "100m", memory: "64Mi" }
@@ -86,9 +88,10 @@ spec:
       serviceAccountName: payments-sa
       containers:
         - name: app
-          image: busybox:latest
+          image: wbitt/network-multitool:latest
           ports:
             - containerPort: 80
+              name: http
           resources:
             requests: { cpu: "10m", memory: "32Mi" }
             limits:   { cpu: "100m", memory: "64Mi" }
@@ -113,9 +116,10 @@ spec:
       serviceAccountName: analytics-sa
       containers:
         - name: app
-          image: busybox:latest
+          image: wbitt/network-multitool:latest
           ports:
             - containerPort: 80
+              name: http
           resources:
             requests: { cpu: "10m", memory: "32Mi" }
             limits:   { cpu: "100m", memory: "64Mi" }
