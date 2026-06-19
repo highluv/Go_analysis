@@ -28,7 +28,6 @@ CREATE TABLE raw_resource (
 
 -- Разобранная identity объекта внутри манифеста (один resource может дать несколько объектов).
 -- apiVersion в k8s уже содержит group ('apps/v1', 'security.istio.io/v1', core = 'v1'),
--- поэтому отдельное поле api_group не нужно — это и есть [FIX] из ERD.
 CREATE TABLE raw_object (
     raw_object_id   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     raw_resource_id bigint       NOT NULL REFERENCES raw_resource(raw_resource_id) ON DELETE CASCADE,
