@@ -18889,6 +18889,31 @@ apiVersion: v1
 data:
   mesh: |-
     accessLogFile: /dev/stdout
+    accessLogEncoding: JSON
+    accessLogFormat: |
+      {
+        "start_time": "%START_TIME%",
+        "method": "%REQ(:METHOD)%",
+        "path": "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+        "authority": "%REQ(:AUTHORITY)%",
+        "protocol": "%PROTOCOL%",
+        "response_code": "%RESPONSE_CODE%",
+        "response_flags": "%RESPONSE_FLAGS%",
+        "response_code_details": "%RESPONSE_CODE_DETAILS%",
+        "bytes_received": "%BYTES_RECEIVED%",
+        "bytes_sent": "%BYTES_SENT%",
+        "duration": "%DURATION%",
+        "upstream_service_time": "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+        "x_request_id": "%REQ(X-REQUEST-ID)%",
+        "user_agent": "%REQ(USER-AGENT)%",
+        "upstream_cluster": "%UPSTREAM_CLUSTER%",
+        "upstream_host": "%UPSTREAM_HOST%",
+        "downstream_remote_address": "%DOWNSTREAM_REMOTE_ADDRESS%",
+        "downstream_local_address": "%DOWNSTREAM_LOCAL_ADDRESS%",
+        "requested_server_name": "%REQUESTED_SERVER_NAME%",
+        "source_principal": "%DOWNSTREAM_PEER_URI_SAN%",
+        "source_subject": "%DOWNSTREAM_PEER_SUBJECT%"
+      }
     defaultConfig:
       discoveryAddress: istiod.istio-system.svc:15012
     defaultProviders:
