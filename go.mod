@@ -1,4 +1,4 @@
-module github.com/Go-analysis
+module github.com/highluv/Go_analysis
 
 go 1.22.0
 
