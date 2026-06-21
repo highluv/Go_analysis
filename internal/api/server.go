@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"strconv"
 
@@ -49,10 +50,27 @@ func (s *Server) Router() http.Handler {
 		r.Get("/snapshots", s.handleListSnapshots)
 		r.Get("/snapshots/{id}", s.handleGetSnapshot)
 		r.Get("/snapshots/{id}/raw", s.handleListRaw)
+		r.Get("/snapshots/{id}/runs", s.handleListRuns)
+		r.Get("/snapshots/{id}/workloads", s.handleListWorkloads)
 		r.Post("/snapshots/{id}/analyze", s.handleAnalyze)
 		r.Get("/runs/{id}", s.handleGetRun)
 		r.Get("/runs/{id}/edges", s.handleGetEdges)
 	})
+
+	sub, _ := fs.Sub(staticFS, "static")
+	fileServer := http.FileServer(http.FS(sub))
+	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
+
+	r.Get("/*", func(w http.ResponseWriter, _ *http.Request) {
+		data, err := staticFS.ReadFile("static/index.html")
+		if err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(data)
+	})
+
 	return r
 }
 
@@ -126,6 +144,38 @@ func (s *Server) handleListRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, raws)
+}
+
+func (s *Server) handleListWorkloads(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	ns, err := s.db.GetNormalizedSnapshot(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toWorkloadInfoList(ns))
+}
+
+func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	runs, err := s.db.ListRuns(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	out := make([]runResponse, 0, len(runs))
+	for _, run := range runs {
+		out = append(out, toRunResponse(run))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // POST /snapshots/{id}/analyze — вычислить граф для области поверх готового снапшота.

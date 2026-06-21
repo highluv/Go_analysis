@@ -29,6 +29,7 @@ spec:
         - name: acgd
           image: acgd:dev
           imagePullPolicy: Never
+          args: ["--serve"]
           ports:
             - name: http
               containerPort: 8080

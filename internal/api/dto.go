@@ -77,3 +77,75 @@ type edgesResponse struct {
 type errorResponse struct {
 	Error string `json:"error"`
 }
+
+// ---------- workload info ----------
+
+type servicePortDTO struct {
+	Name       string `json:"name,omitempty"`
+	Protocol   string `json:"protocol"`
+	Port       int    `json:"port"`
+	TargetPort string `json:"targetPort,omitempty"`
+}
+
+type workloadServiceDTO struct {
+	Name  string           `json:"name"` // ns/name
+	Type  string           `json:"type,omitempty"`
+	Ports []servicePortDTO `json:"ports"`
+}
+
+type workloadInfoDTO struct {
+	Name           string               `json:"name"` // ns/name
+	Kind           string               `json:"kind"`
+	ServiceAccount string               `json:"serviceAccount"` // ns/name
+	Services       []workloadServiceDTO `json:"services"`
+}
+
+func toWorkloadInfoList(ns *model.NormalizedSnapshot) []workloadInfoDTO {
+	nsName := map[int64]string{}
+	for _, n := range ns.Namespaces {
+		nsName[n.ID] = n.Name
+	}
+	saName := map[int64]string{}
+	for _, sa := range ns.ServiceAccounts {
+		saName[sa.ID] = nsName[sa.NamespaceID] + "/" + sa.Name
+	}
+	svcByID := map[int64]*model.Service{}
+	for _, s := range ns.Services {
+		svcByID[s.ID] = s
+	}
+	wlServices := map[int64][]int64{}
+	for _, m := range ns.Matches {
+		wlServices[m.WorkloadID] = append(wlServices[m.WorkloadID], m.ServiceID)
+	}
+
+	out := make([]workloadInfoDTO, 0, len(ns.Workloads))
+	for _, w := range ns.Workloads {
+		wlName := nsName[w.NamespaceID] + "/" + w.Name
+		svcs := make([]workloadServiceDTO, 0)
+		for _, svcID := range wlServices[w.ID] {
+			svc := svcByID[svcID]
+			if svc == nil {
+				continue
+			}
+			ports := make([]servicePortDTO, 0, len(svc.Ports))
+			for _, p := range svc.Ports {
+				ports = append(ports, servicePortDTO{
+					Name: p.Name, Protocol: p.Protocol,
+					Port: p.Port, TargetPort: p.TargetPort,
+				})
+			}
+			svcs = append(svcs, workloadServiceDTO{
+				Name:  nsName[svc.NamespaceID] + "/" + svc.Name,
+				Type:  svc.Type,
+				Ports: ports,
+			})
+		}
+		out = append(out, workloadInfoDTO{
+			Name:           wlName,
+			Kind:           w.Kind,
+			ServiceAccount: saName[w.ServiceAccountID],
+			Services:       svcs,
+		})
+	}
+	return out
+}
