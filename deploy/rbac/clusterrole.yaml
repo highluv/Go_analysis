@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acgd-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "serviceaccounts", "services"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  # Istio CRD может отсутствовать — приложение само обрабатывает 404 как non-fatal.
+  - apiGroups: ["security.istio.io"]
+    resources: ["authorizationpolicies", "peerauthentications"]
+    verbs: ["get", "list"]

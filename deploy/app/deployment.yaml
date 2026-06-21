@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acgd
+  namespace: acg-system
+  labels:
+    app.kubernetes.io/name: acgd
+    app.kubernetes.io/part-of: acg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: acgd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acgd
+    spec:
+      serviceAccountName: acgd   # даёт поду ClusterRole acgd-reader для чтения k8s API
+
+      initContainers:
+        - name: migrate
+          image: acgd:dev
+          imagePullPolicy: Never  # образ импортирован через k3d image import
+          # ENV ACG_POSTGRES_DSN уже в образе — goose читает его из окружения. Так делать не нада.
+          command: ["sh", "-c", "goose -dir /migrations postgres \"$ACG_POSTGRES_DSN\" up"]
+
+      containers:
+        - name: acgd
+          image: acgd:dev
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "50m",  memory: "64Mi" }
+            limits:   { cpu: "500m", memory: "128Mi" }

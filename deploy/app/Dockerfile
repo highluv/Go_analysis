@@ -4,10 +4,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /acgd ./cmd/acgd
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 
 FROM alpine:3.20
 RUN addgroup -S acg && adduser -S acg -G acg
 COPY --from=build /acgd /usr/local/bin/acgd
+COPY --from=build /go/bin/goose /usr/local/bin/goose
+COPY migrations/ /migrations/
 USER acg
 
 ENV ACG_HTTP_ADDR=":8080" \
