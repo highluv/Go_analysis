@@ -68,7 +68,7 @@ func (d *DB) GetSnapshot(ctx context.Context, id int64) (model.Snapshot, error) 
 func (d *DB) ListSnapshots(ctx context.Context) ([]model.Snapshot, error) {
 	rows, err := d.pool.Query(ctx,
 		`SELECT snapshot_id, name, source_type, status, created_at
-		 FROM snapshot ORDER BY snapshot_id`)
+		 FROM snapshot ORDER BY snapshot_id DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -182,16 +182,19 @@ func (d *DB) CreateServiceAccount(ctx context.Context, rawObjectID, namespaceID,
 	return id, nil
 }
 
-func (d *DB) CreateWorkload(ctx context.Context, rawObjectID, snapshotID, namespaceID, serviceAccountID int64, kind, name string) (int64, error) {
+func (d *DB) CreateWorkload(ctx context.Context, rawObjectID, snapshotID, namespaceID, serviceAccountID int64, kind, name string, images []string) (int64, error) {
 	var id int64
 	var saPtr *int64
 	if serviceAccountID != 0 {
 		saPtr = &serviceAccountID
 	}
+	if images == nil {
+		images = []string{}
+	}
 	err := d.pool.QueryRow(ctx,
-		`INSERT INTO workload(raw_object_id, snapshot_id, namespace_id, service_account_id, kind, name)
-		 VALUES($1,$2,$3,$4,$5,$6) RETURNING workload_id`,
-		rawObjectID, snapshotID, namespaceID, saPtr, kind, name,
+		`INSERT INTO workload(raw_object_id, snapshot_id, namespace_id, service_account_id, kind, name, images)
+		 VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING workload_id`,
+		rawObjectID, snapshotID, namespaceID, saPtr, kind, name, images,
 	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("insert workload %s/%s: %w", kind, name, err)
@@ -392,7 +395,7 @@ func (d *DB) GetNormalizedSnapshot(ctx context.Context, snapshotID int64) (*mode
 		rows, err := d.pool.Query(ctx, `
 			SELECT w.workload_id, w.namespace_id,
 			       COALESCE(w.service_account_id, 0),
-			       w.kind, w.name, k.key, k.value
+			       w.kind, w.name, w.images, k.key, k.value
 			FROM workload w
 			LEFT JOIN object_label ol ON ol.raw_object_id = w.raw_object_id AND ol.label_scope = 'POD_TEMPLATE'
 			LEFT JOIN kv_storage k ON k.kv_storage_id = ol.kv_storage_id
@@ -406,13 +409,14 @@ func (d *DB) GetNormalizedSnapshot(ctx context.Context, snapshotID int64) (*mode
 		for rows.Next() {
 			var wID, nsID, saID int64
 			var kind, name string
+			var images []string
 			var key, val *string
-			if err := rows.Scan(&wID, &nsID, &saID, &kind, &name, &key, &val); err != nil {
+			if err := rows.Scan(&wID, &nsID, &saID, &kind, &name, &images, &key, &val); err != nil {
 				return nil, err
 			}
 			w, ok := byID[wID]
 			if !ok {
-				w = &model.Workload{ID: wID, NamespaceID: nsID, ServiceAccountID: saID, Kind: kind, Name: name, Labels: map[string]string{}}
+				w = &model.Workload{ID: wID, NamespaceID: nsID, ServiceAccountID: saID, Kind: kind, Name: name, Labels: map[string]string{}, Images: images}
 				byID[wID] = w
 				ns.Workloads = append(ns.Workloads, w)
 			}

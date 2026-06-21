@@ -1,5 +1,25 @@
 'use strict';
 
+// ─── Human-readable labels for matchedBy constants ───────────────────────
+const MATCH_LABELS = {
+  'principal':             'SA / Principal',
+  'namespace':             'Namespace',
+  'any':                   'Любой источник',
+  'default-allow-noallow': 'По умолчанию (нет политик)',
+};
+
+function matchLabel(raw) {
+  return MATCH_LABELS[raw] || raw;
+}
+
+// ─── Namespaces hidden from the graph (platform / infrastructure) ────────
+const HIDDEN_NS = new Set(['istio-system']);
+
+function hiddenNs(qualifiedName) {
+  const i = qualifiedName.indexOf('/');
+  return i >= 0 && HIDDEN_NS.has(qualifiedName.slice(0, i));
+}
+
 // ─── Colour palette (cycled by namespace) ─────────────────────────────────
 const PALETTE = [
   '#4e79a7','#f28e2b','#e15759','#76b7b2',
@@ -272,8 +292,9 @@ async function renderRun(app, id) {
           <div class="card evidence-card shadow-sm h-100">
             <div class="card-body" id="evidence-panel">
               <p class="text-muted small mb-0">
-                Нажмите на <strong>узел</strong> — увидите сервисы и порты.<br>
-                Нажмите на <strong>ребро</strong> — увидите evidence.
+                Нажмите на <strong>воркло́д</strong> (○) — тип, SA, labels, образы, политики.<br>
+                Нажмите на <strong>сервис</strong> (△) — тип, порты, selector.<br>
+                Нажмите на <strong>ребро</strong> — сервис и политики.
               </p>
             </div>
           </div>
@@ -345,40 +366,149 @@ async function renderRun(app, id) {
 }
 
 // ─── Cytoscape graph ──────────────────────────────────────────────────────
-function buildGraph(edges, wlMap) {
+// Mental model: Source workload → Service (△) → Destination workload
+function buildGraph(edgesAll, wlMapAll) {
   const nsMap = {};
-  const nodeSet = new Set();
+
+  // Drop platform namespaces (istio-system, etc.)
+  const edges = edgesAll.filter(e => !hiddenNs(e.source) && !hiddenNs(e.dest));
+  const wlMap = Object.fromEntries(Object.entries(wlMapAll).filter(([k]) => !hiddenNs(k)));
+
+  // ── Indexes ─────────────────────────────────────────────────────────────
+  const allWlNames = new Set(Object.keys(wlMap));
+  edges.forEach(e => { allWlNames.add(e.source); allWlNames.add(e.dest); });
+
+  const svcMap   = {};  // svcName → workloadServiceDTO
+  const svcOwner = {};  // svcName → owning wlName
+  Object.values(wlMap).forEach(wl => {
+    (wl.services || []).forEach(svc => {
+      svcMap[svc.name]   = svc;
+      svcOwner[svc.name] = wl.name;
+    });
+  });
+
+  // Workloads with ≥1 service get a compound parent (groups wl ○ + svc △)
+  const wlHasSvc = new Set(
+    Object.values(wlMap).filter(wl => (wl.services || []).length > 0).map(wl => wl.name)
+  );
+
+  // Pre-populate nsMap so compound nodes share the same colour
+  allWlNames.forEach(wl => {
+    const i  = wl.indexOf('/');
+    nsColor(i >= 0 ? wl.slice(0, i) : wl, nsMap);
+  });
+
+  // ── Nodes ──────────────────────────────────────────────────────────────
+  const cyNodes = [];
+
+  // Compound containers
+  wlHasSvc.forEach(wlName => {
+    const i = wlName.indexOf('/');
+    const ns = i >= 0 ? wlName.slice(0, i) : wlName;
+    cyNodes.push({
+      data: { id: `group:${wlName}`, nodeType: 'compound', color: nsMap[ns] || '#adb5bd' },
+    });
+  });
+
+  // Workload nodes (inside compound when they have services)
+  allWlNames.forEach(wl => {
+    const i    = wl.indexOf('/');
+    const ns   = i >= 0 ? wl.slice(0, i) : wl;
+    const name = i >= 0 ? wl.slice(i + 1) : wl;
+    const d    = { id: wl, label: name, ns, color: nsColor(ns, nsMap), nodeType: 'workload' };
+    if (wlHasSvc.has(wl)) d.parent = `group:${wl}`;
+    cyNodes.push({ data: d });
+  });
+
+  // Service nodes (inside compound of their owning workload)
+  Object.values(svcMap).forEach(svc => {
+    const i     = svc.name.indexOf('/');
+    const ns    = i >= 0 ? svc.name.slice(0, i) : svc.name;
+    const label = i >= 0 ? svc.name.slice(i + 1) : svc.name;
+    const owner = svcOwner[svc.name];
+    const d     = { id: `svc:${svc.name}`, label, ns, color: nsColor(ns, nsMap), nodeType: 'service' };
+    if (owner && wlHasSvc.has(owner)) d.parent = `group:${owner}`;
+    cyNodes.push({ data: d });
+  });
+
+  // ── Edges ──────────────────────────────────────────────────────────────
+  // Single hop: source_wl → svc (△ is inside compound of dest_wl — grouping replaces svc→dest edge)
   const cyEdges = [];
+  const srcSvcGroups = {};
 
   edges.forEach(e => {
-    nodeSet.add(e.source);
-    nodeSet.add(e.dest);
+    if (e.viaService) {
+      const k = `${e.source}|${e.viaService}`;
+      if (!srcSvcGroups[k]) {
+        srcSvcGroups[k] = {
+          src: e.source, via: e.viaService,
+          destWl: svcOwner[e.viaService] || e.dest,
+          conns: [],
+        };
+      }
+      srcSvcGroups[k].conns.push(e);
+    } else {
+      // fallback: direct workload→workload
+      cyEdges.push({
+        data: {
+          id: `direct:${e.source}|${e.dest}`,
+          source: e.source, target: e.dest,
+          edgeType: 'flow', connEdges: [e],
+          destWl: e.dest, label: e.port ? String(e.port) : '',
+        },
+      });
+    }
+  });
+
+  Object.entries(srcSvcGroups).forEach(([key, g]) => {
+    const ports = [...new Set(g.conns.map(e => e.port).filter(Boolean))];
     cyEdges.push({
       data: {
-        id: `${e.source}||${e.dest}`,
-        source: e.source,
-        target: e.dest,
-        label: e.port ? String(e.port) : '',
-        evidence: e.evidence,
-        viaService: e.viaService || '',
+        id: `flow:${key}`,
+        source: g.src, target: `svc:${g.via}`,
+        edgeType: 'flow', viaService: g.via,
+        connEdges: g.conns, destWl: g.destWl,
+        label: ports.join(','),
       },
     });
   });
 
-  const cyNodes = Array.from(nodeSet).map(wl => {
-    const parts = wl.split('/');
-    const ns    = parts[0] || wl;
-    const name  = parts[1] || wl;
-    return { data: { id: wl, label: name, ns, color: nsColor(ns, nsMap) } };
+  // Invisible spring edges inside each compound: pull svc △ toward its workload ○
+  // so cose doesn't scatter them across the container (no visible edge, pure physics)
+  Object.values(svcMap).forEach(svc => {
+    const owner = svcOwner[svc.name];
+    if (owner && allWlNames.has(owner)) {
+      cyEdges.push({
+        data: {
+          id: `spring:${svc.name}`,
+          source: `svc:${svc.name}`, target: owner,
+          edgeType: 'spring',
+        },
+      });
+    }
   });
 
+  // ── Cytoscape init ──────────────────────────────────────────────────────
   cy = cytoscape({
     container: document.getElementById('cy'),
-    elements: { nodes: cyNodes, edges: cyEdges },
+    elements:  { nodes: cyNodes, edges: cyEdges },
     style: [
       {
-        selector: 'node',
+        selector: 'node[nodeType = "compound"]',
         style: {
+          'background-color':   'data(color)',
+          'background-opacity': 0.07,
+          'border-color':       'data(color)',
+          'border-width':       1.5,
+          'border-style':       'dashed',
+          'padding':            '14px',
+          'label':              '',
+        },
+      },
+      {
+        selector: 'node[nodeType = "workload"]',
+        style: {
+          'shape':             'ellipse',
           'background-color':  'data(color)',
           'label':             'data(label)',
           'color':             '#fff',
@@ -393,11 +523,27 @@ function buildGraph(edges, wlMap) {
         },
       },
       {
-        selector: 'edge',
+        selector: 'node[nodeType = "service"]',
+        style: {
+          'shape':              'triangle',
+          'background-color':   'data(color)',
+          'background-opacity': 0.65,
+          'label':              'data(label)',
+          'color':              '#333',
+          'text-valign':        'bottom',
+          'text-margin-y':      4,
+          'text-halign':        'center',
+          'font-size':          '10px',
+          'width':              44,
+          'height':             44,
+        },
+      },
+      {
+        selector: 'edge[edgeType = "flow"]',
         style: {
           'width':                   2,
-          'line-color':              '#adb5bd',
-          'target-arrow-color':      '#adb5bd',
+          'line-color':              '#6c757d',
+          'target-arrow-color':      '#6c757d',
           'target-arrow-shape':      'triangle',
           'curve-style':             'bezier',
           'label':                   'data(label)',
@@ -409,12 +555,23 @@ function buildGraph(edges, wlMap) {
         },
       },
       {
-        selector: 'edge:selected',
-        style: {
-          'line-color':         '#0d6efd',
-          'target-arrow-color': '#0d6efd',
-          'width':              3,
-        },
+        selector: 'edge[edgeType = "flow"]:selected',
+        style: { 'line-color': '#0d6efd', 'target-arrow-color': '#0d6efd', 'width': 3 },
+      },
+      // Spring edges: invisible, only exist for layout physics
+      {
+        selector: 'edge[edgeType = "spring"]',
+        style: { 'width': 0, 'opacity': 0, 'events': 'no' },
+      },
+      // Incoming edges highlighted green on workload click
+      {
+        selector: 'edge.hl-in',
+        style: { 'line-color': '#198754', 'target-arrow-color': '#198754', 'width': 3 },
+      },
+      // Outgoing edges highlighted red on workload click
+      {
+        selector: 'edge.hl-out',
+        style: { 'line-color': '#dc3545', 'target-arrow-color': '#dc3545', 'width': 3 },
       },
       {
         selector: 'node:selected',
@@ -422,98 +579,210 @@ function buildGraph(edges, wlMap) {
       },
     ],
     layout: {
-      name:          'cose',
-      padding:        50,
-      idealEdgeLength: 130,
-      nodeOverlap:    20,
-      animate:        false,
+      name:    'cose',
+      padding:  50,
+      // Spring edges (svc→wl inside compound) stay tight; flow edges between compounds breathe
+      idealEdgeLength: edge => edge.data('edgeType') === 'spring' ? 50 : 130,
+      nodeOverlap:     20,
+      animate:         false,
     },
   });
 
-  // Node click → workload details
-  cy.on('tap', 'node', evt => {
-    const name = evt.target.data('id');
-    const wl   = wlMap[name];
-    const panel = document.getElementById('evidence-panel');
-    panel.innerHTML = wl ? renderWorkloadInfo(wl) : `<p class="text-muted small mb-0">${esc(name)}</p>`;
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  const panel = () => document.getElementById('evidence-panel');
+
+  function resetHighlight() { cy.edges().removeClass('hl-in hl-out'); }
+
+  function showWorkload(wlName) {
+    const wl      = wlMap[wlName];
+    const inbound  = edges.filter(e => e.dest   === wlName);
+    const outbound = edges.filter(e => e.source === wlName);
+    resetHighlight();
+    cy.edges('[edgeType="flow"]').forEach(e => {
+      if (e.data('destWl') === wlName)      e.addClass('hl-in');
+      else if (e.source().id() === wlName)  e.addClass('hl-out');
+    });
+    panel().innerHTML = renderWorkloadInfo(
+      wl || { name: wlName, kind: '', serviceAccount: '', services: [], labels: {}, images: [] },
+      inbound, outbound,
+    );
+  }
+
+  // ── Click handlers ──────────────────────────────────────────────────────
+  cy.on('tap', 'node[nodeType = "workload"]', evt => {
+    showWorkload(evt.target.data('id'));
   });
 
-  // Edge click → evidence panel
-  cy.on('tap', 'edge', evt => {
+  // Click on compound background → same as clicking the workload inside
+  cy.on('tap', 'node[nodeType = "compound"]', evt => {
+    showWorkload(evt.target.id().replace(/^group:/, ''));
+  });
+
+  cy.on('tap', 'node[nodeType = "service"]', evt => {
+    resetHighlight();
+    const svcName = evt.target.data('id').replace(/^svc:/, '');
+    const svc     = svcMap[svcName];
+    panel().innerHTML = svc
+      ? renderServiceInfo(svc)
+      : `<p class="text-muted small mb-0">${esc(svcName)}</p>`;
+  });
+
+  cy.on('tap', 'edge[edgeType = "flow"]', evt => {
+    resetHighlight();
     const d = evt.target.data();
-    const panel = document.getElementById('evidence-panel');
-    panel.innerHTML = `
-      <div class="fw-semibold mb-1">${esc(d.source)} → ${esc(d.target)}</div>
-      ${d.viaService ? `<div class="text-muted small mb-2">Через: <code>${esc(d.viaService)}</code></div>` : ''}
-      ${renderEvidence(d.evidence)}
-    `;
+    panel().innerHTML = renderEdgeInfo(d.viaService || '', d.connEdges || []);
   });
 
-  // Background click → clear panel
   cy.on('tap', evt => {
     if (evt.target === cy) {
-      document.getElementById('evidence-panel').innerHTML =
+      resetHighlight();
+      panel().innerHTML =
         '<p class="text-muted small mb-0">Нажмите на узел или ребро, чтобы увидеть детали</p>';
     }
   });
 
-  // Namespace legend
+  // ── Legend ──────────────────────────────────────────────────────────────
   const legend = document.getElementById('ns-legend');
+  legend.innerHTML = '';
   Object.entries(nsMap).forEach(([ns, color]) => {
     const el = document.createElement('span');
-    el.className = 'small text-muted';
+    el.className = 'small text-muted me-3';
     el.innerHTML = `<span class="ns-dot" style="background:${color}"></span>${esc(ns)}`;
     legend.appendChild(el);
   });
+  const hint = document.createElement('span');
+  hint.className = 'small text-muted ms-2';
+  hint.innerHTML = '<span style="display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #6c757d;vertical-align:middle;margin-right:4px"></span>Сервис';
+  legend.appendChild(hint);
 }
 
 // ─── Evidence rendering ───────────────────────────────────────────────────
 function renderEvidence(ev) {
   if (!ev || ev.length === 0) {
-    return '<p class="text-muted small mb-0">Evidence отсутствует (default allow)</p>';
+    return '<p class="text-muted small mb-0">Evidence отсутствует</p>';
   }
-  return ev.map(e => `
+  return ev.map(e => {
+    const isDefault = e.matchedBy === 'default-allow-noallow';
+    return `
     <div class="evidence-item border rounded p-2 mb-2 bg-light">
-      <span class="badge bg-secondary mb-1">${esc(e.matchedBy)}</span>
-      ${e.policy            ? `<div><span class="text-muted">Политика:</span> <code>${esc(e.policy)}</code></div>` : ''}
-      ${e.sourceServiceAccount ? `<div><span class="text-muted">SA:</span> <code>${esc(e.sourceServiceAccount)}</code></div>` : ''}
-      ${e.matchedValue      ? `<div><span class="text-muted">Значение:</span> <code>${esc(e.matchedValue)}</code></div>` : ''}
-      ${e.service           ? `<div><span class="text-muted">Сервис:</span> <code>${esc(e.service)}</code></div>` : ''}
-    </div>`).join('');
+      <span class="badge bg-secondary mb-1">${esc(matchLabel(e.matchedBy))}</span>
+      ${isDefault
+        ? `<div class="text-muted small mt-1">У получателя нет ALLOW-политик — Istio разрешает соединение по умолчанию.</div>`
+        : `
+          ${e.policy            ? `<div><span class="text-muted">Политика:</span> <code>${esc(e.policy)}</code></div>` : ''}
+          ${e.sourceServiceAccount ? `<div><span class="text-muted">SA:</span> <code>${esc(e.sourceServiceAccount)}</code></div>` : ''}
+          ${e.matchedValue      ? `<div><span class="text-muted">Значение:</span> <code>${esc(e.matchedValue)}</code></div>` : ''}
+        `
+      }
+      ${e.service ? `<div><span class="text-muted">Сервис:</span> <code>${esc(e.service)}</code></div>` : ''}
+    </div>`;
+  }).join('');
 }
 
-function renderWorkloadInfo(wl) {
-  const svcHtml = wl.services.length === 0
-    ? '<p class="text-muted small mb-0">Сервисов нет</p>'
-    : wl.services.map(s => {
-        const portsHtml = s.ports.length === 0
-          ? '<span class="text-muted small">портов нет</span>'
-          : s.ports.map(p => `
-              <div class="small font-monospace">
-                <span class="badge bg-secondary">${esc(p.protocol)}</span>
-                :${p.port}${p.targetPort ? ` → ${esc(p.targetPort)}` : ''}
-                ${p.name ? `<span class="text-muted ms-1">(${esc(p.name)})</span>` : ''}
-              </div>`).join('');
-        return `
-          <div class="border rounded p-2 mb-2 bg-light">
-            <div class="fw-semibold small mb-1">
-              <code>${esc(s.name)}</code>
-              ${s.type ? `<span class="text-muted ms-1">${esc(s.type)}</span>` : ''}
-            </div>
-            ${portsHtml}
-          </div>`;
-      }).join('');
+function renderWorkloadInfo(wl, inbound, outbound) {
+  const labelsHtml = wl.labels && Object.keys(wl.labels).length > 0
+    ? Object.entries(wl.labels).map(([k, v]) =>
+        `<span class="badge bg-light text-dark border me-1 mb-1" style="font-weight:400"><code>${esc(k)}: ${esc(v)}</code></span>`
+      ).join('')
+    : '<span class="text-muted small">нет</span>';
+
+  const imagesHtml = wl.images && wl.images.length > 0
+    ? wl.images.map(img => `<div class="small font-monospace text-break">${esc(img)}</div>`).join('')
+    : '<span class="text-muted small">нет данных</span>';
+
+  const svcNames = (wl.services || []).map(s => `<code class="small">${esc(s.name)}</code>`).join(', ')
+    || '<span class="text-muted small">нет</span>';
+
+  const inboundHtml = (inbound || []).length === 0
+    ? '<p class="text-muted small mb-0">нет входящих разрешений</p>'
+    : (inbound || []).map(e => `
+        <div class="border-start border-3 border-primary ps-2 mb-2">
+          <div class="small"><span class="text-muted">от</span> <code>${esc(e.source)}</code></div>
+          <div class="small mb-1"><span class="text-muted">через</span> <code>${esc(e.viaService)}</code> :${e.port || '?'} <span class="text-muted">${esc(e.protocol || '')}</span></div>
+          <div>${evidenceSummary(e.evidence)}</div>
+        </div>`).join('');
+
+  const outboundHtml = (outbound || []).length === 0
+    ? '<p class="text-muted small mb-0">нет исходящих</p>'
+    : (outbound || []).map(e => `
+        <div class="border-start border-3 border-success ps-2 mb-2">
+          <div class="small"><span class="text-muted">к</span> <code>${esc(e.dest)}</code></div>
+          <div class="small"><span class="text-muted">через</span> <code>${esc(e.viaService)}</code> :${e.port || '?'}</div>
+        </div>`).join('');
 
   return `
     <div class="fw-semibold mb-1">${esc(wl.name)}</div>
-    <div class="text-muted small mb-1">
-      <span class="badge bg-dark">${esc(wl.kind)}</span>
+    <div class="mb-2"><span class="badge bg-dark">${esc(wl.kind || '?')}</span></div>
+    <table class="table table-sm table-borderless mb-2" style="font-size:.85rem">
+      <tr><td class="text-muted pe-2" style="white-space:nowrap">SA</td>
+          <td><code>${esc(wl.serviceAccount)}</code></td></tr>
+      <tr><td class="text-muted pe-2">Сервисы</td>
+          <td>${svcNames}</td></tr>
+    </table>
+    <div class="text-muted small fw-semibold mb-1">Labels пода</div>
+    <div class="mb-2">${labelsHtml}</div>
+    <div class="text-muted small fw-semibold mb-1">Образы</div>
+    <div class="mb-3">${imagesHtml}</div>
+    <div class="text-muted small fw-semibold mb-1">
+      <span class="badge bg-primary me-1">${(inbound || []).length}</span>Входящие разрешения
     </div>
-    <div class="text-muted small mb-2">
-      SA: <code>${esc(wl.serviceAccount)}</code>
+    <div class="mb-3">${inboundHtml}</div>
+    <div class="text-muted small fw-semibold mb-1">
+      <span class="badge bg-success me-1">${(outbound || []).length}</span>Исходящие
     </div>
-    <div class="text-muted small fw-semibold mb-1">Сервисы</div>
-    ${svcHtml}
+    <div>${outboundHtml}</div>
+  `;
+}
+
+function renderServiceInfo(svc) {
+  const portsHtml = svc.ports && svc.ports.length > 0
+    ? svc.ports.map(p => `
+        <div class="evidence-item border rounded p-2 mb-1 bg-light small">
+          <span class="badge bg-secondary">${esc(p.protocol)}</span>
+          <strong>:${p.port}</strong>
+          ${p.targetPort ? `→ <code>${esc(p.targetPort)}</code>` : ''}
+          ${p.name ? `<span class="text-muted ms-1">(${esc(p.name)})</span>` : ''}
+        </div>`).join('')
+    : '<span class="text-muted small">портов нет</span>';
+
+  const selectorHtml = svc.selector && Object.keys(svc.selector).length > 0
+    ? Object.entries(svc.selector).map(([k, v]) =>
+        `<span class="badge bg-light text-dark border me-1 mb-1" style="font-weight:400"><code>${esc(k)}: ${esc(v)}</code></span>`
+      ).join('')
+    : '<span class="text-muted small">нет (selectorless)</span>';
+
+  return `
+    <div class="fw-semibold mb-1">
+      ▲ ${esc(svc.name)}
+    </div>
+    <div class="mb-2">
+      <span class="badge bg-secondary">${esc(svc.type || 'ClusterIP')}</span>
+    </div>
+    <div class="text-muted small fw-semibold mb-1">Порты</div>
+    <div class="mb-2">${portsHtml}</div>
+    <div class="text-muted small fw-semibold mb-1">Selector (матчит labels пода)</div>
+    <div>${selectorHtml}</div>
+  `;
+}
+
+function renderEdgeInfo(viaService, connEdges) {
+  if (!connEdges || connEdges.length === 0) {
+    return '<p class="text-muted small mb-0">Нет данных о соединении</p>';
+  }
+  const flowHtml = connEdges.map(e => `
+    <div class="border rounded p-2 mb-2 bg-light">
+      <div class="small mb-1">
+        <code>${esc(e.source)}</code>
+        <span class="text-muted mx-1">→</span>
+        <code>${esc(e.dest)}</code>
+        <span class="text-muted ms-2">:${e.port || '?'} ${esc(e.protocol || '')}</span>
+      </div>
+      ${renderEvidence(e.evidence)}
+    </div>`).join('');
+
+  return `
+    <div class="fw-semibold mb-2">▲ ${esc(viaService)}</div>
+    ${flowHtml}
   `;
 }
 
@@ -547,7 +816,7 @@ function statusBadge(s) {
 function evidenceSummary(ev) {
   if (!ev || ev.length === 0) return '<span class="text-muted small">default allow</span>';
   const types = [...new Set(ev.map(e => e.matchedBy))];
-  return types.map(t => `<span class="badge bg-secondary me-1 small">${esc(t)}</span>`).join('');
+  return types.map(t => `<span class="badge bg-secondary me-1 small">${esc(matchLabel(t))}</span>`).join('');
 }
 
 function fmtDate(s) {

@@ -122,6 +122,17 @@ func Normalize(snapshotID int64, manifests []collect.RawManifest) *model.Normali
 				saName = defaultServiceAccount
 			}
 			sa := ensureSA(n.ID, saName)
+			var images []string
+			for _, c := range o.Spec.Template.Spec.Containers {
+				if c.Image != "" {
+					images = append(images, c.Image)
+				}
+			}
+			for _, c := range o.Spec.Template.Spec.InitContainers {
+				if c.Image != "" {
+					images = append(images, "init:"+c.Image)
+				}
+			}
 			ns.Workloads = append(ns.Workloads, &model.Workload{
 				ID:               ids.next(),
 				NamespaceID:      n.ID,
@@ -129,6 +140,7 @@ func Normalize(snapshotID int64, manifests []collect.RawManifest) *model.Normali
 				Kind:             o.Kind,
 				Name:             o.Metadata.Name,
 				Labels:           o.Spec.Template.Metadata.Labels, // labels ПОДА, не контроллера
+				Images:           images,
 			})
 
 		case "Service":

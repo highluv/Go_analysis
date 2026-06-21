@@ -183,7 +183,7 @@ func persistNormalized(ctx context.Context, db store.DB, snapID int64, ns *model
 		nsName := nsNameByOldID(ns, w.NamespaceID)
 		rawID := rawByKey[rawKey{w.Kind, nsName, w.Name}]
 		saDBID := oldSAIDtoDBID[w.ServiceAccountID]
-		dbID, err := db.CreateWorkload(ctx, rawID, snapID, nsID, saDBID, w.Kind, w.Name)
+		dbID, err := db.CreateWorkload(ctx, rawID, snapID, nsID, saDBID, w.Kind, w.Name, w.Images)
 		if err != nil {
 			return fmt.Errorf("CreateWorkload %s/%s: %w", w.Kind, w.Name, err)
 		}

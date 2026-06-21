@@ -32,9 +32,16 @@ tr.clickable:hover td {
   background-color: #eef2ff;
 }
 
-.badge-READY, .badge-DONE    { background-color: #198754 !important; }
-.badge-PENDING, .badge-RUNNING { background-color: #fd7e14 !important; }
-.badge-FAILED  { background-color: #dc3545 !important; }
+/* Snapshot statuses */
+.badge-NORMALIZED               { background-color: #198754 !important; }
+.badge-COLLECTING,
+.badge-COLLECTED                { background-color: #fd7e14 !important; }
+/* Run statuses */
+.badge-COMPLETE                 { background-color: #198754 !important; }
+.badge-PARTIAL                  { background-color: #0dcaf0 !important; color: #000 !important; }
+.badge-PENDING                  { background-color: #fd7e14 !important; }
+/* Shared */
+.badge-FAILED                   { background-color: #dc3545 !important; }
 
 .page-header {
   border-bottom: 1px solid #dee2e6;

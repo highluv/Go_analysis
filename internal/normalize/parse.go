@@ -28,6 +28,12 @@ type workloadObj struct {
 			} `json:"metadata"`
 			Spec struct {
 				ServiceAccountName string `json:"serviceAccountName"`
+				Containers         []struct {
+					Image string `json:"image"`
+				} `json:"containers"`
+				InitContainers []struct {
+					Image string `json:"image"`
+				} `json:"initContainers"`
 			} `json:"spec"`
 		} `json:"template"`
 	} `json:"spec"`

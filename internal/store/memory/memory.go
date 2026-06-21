@@ -6,6 +6,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -38,6 +39,7 @@ type memWorkload struct {
 	saID        int64
 	kind        string
 	name        string
+	images      []string
 }
 
 type memService struct {
@@ -106,8 +108,21 @@ type memMatch struct {
 type Store struct {
 	mu sync.RWMutex
 
-	// sequencer
-	seq atomic.Int64
+	// независимые счётчики — как GENERATED ALWAYS AS IDENTITY в PostgreSQL (по одной sequence на таблицу)
+	seqSnapshot  atomic.Int64
+	seqRawRes    atomic.Int64
+	seqRawObj    atomic.Int64
+	seqKV        atomic.Int64
+	seqNS        atomic.Int64
+	seqSA        atomic.Int64
+	seqWorkload  atomic.Int64
+	seqService   atomic.Int64
+	seqAuthPol   atomic.Int64
+	seqAuthRule  atomic.Int64
+	seqAuthSrc   atomic.Int64
+	seqPeerAuth  atomic.Int64
+	seqRun       atomic.Int64
+	seqEdge      atomic.Int64
 
 	// blob
 	blobs map[string][]byte
@@ -173,7 +188,6 @@ func New() *Store {
 	return s
 }
 
-func (s *Store) nextID() int64 { return s.seq.Add(1) }
 
 // ---- Blob ----
 
@@ -201,7 +215,7 @@ func (s *Store) Get(_ context.Context, key string) ([]byte, error) {
 // ---- snapshot ----
 
 func (s *Store) CreateSnapshot(_ context.Context, name, sourceType string) (int64, error) {
-	id := s.nextID()
+	id := s.seqSnapshot.Add(1)
 	snap := &model.Snapshot{ID: id, Name: name, SourceType: sourceType, Status: model.SnapshotCollecting}
 	s.mu.Lock()
 	s.snapshots[id] = snap
@@ -237,13 +251,14 @@ func (s *Store) ListSnapshots(_ context.Context) ([]model.Snapshot, error) {
 	for _, snap := range s.snapshots {
 		out = append(out, *snap)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
 	return out, nil
 }
 
 // ---- raw ----
 
 func (s *Store) AddRawResource(_ context.Context, r model.RawResource) (int64, error) {
-	id := s.nextID()
+	id := s.seqRawRes.Add(1)
 	cp := r
 	cp.ID = id
 	s.mu.Lock()
@@ -253,7 +268,7 @@ func (s *Store) AddRawResource(_ context.Context, r model.RawResource) (int64, e
 }
 
 func (s *Store) AddRawObject(_ context.Context, o model.RawObject) (int64, error) {
-	id := s.nextID()
+	id := s.seqRawObj.Add(1)
 	cp := o
 	cp.ID = id
 	s.mu.Lock()
@@ -288,7 +303,7 @@ func (s *Store) UpsertKV(_ context.Context, key, value string) (int64, error) {
 	if id, ok := s.kvByPair[pair]; ok {
 		return id, nil
 	}
-	id := s.nextID()
+	id := s.seqKV.Add(1)
 	s.kvByID[id] = pair
 	s.kvByPair[pair] = id
 	return id, nil
@@ -297,7 +312,7 @@ func (s *Store) UpsertKV(_ context.Context, key, value string) (int64, error) {
 // ---- нормализованный слой — запись ----
 
 func (s *Store) CreateNamespace(_ context.Context, rawObjectID, snapshotID int64, name string) (int64, error) {
-	id := s.nextID()
+	id := s.seqNS.Add(1)
 	s.mu.Lock()
 	s.namespaces[id] = &memNS{id: id, rawObjectID: rawObjectID, snapshotID: snapshotID, name: name}
 	s.mu.Unlock()
@@ -305,23 +320,23 @@ func (s *Store) CreateNamespace(_ context.Context, rawObjectID, snapshotID int64
 }
 
 func (s *Store) CreateServiceAccount(_ context.Context, rawObjectID, namespaceID, snapshotID int64, name string) (int64, error) {
-	id := s.nextID()
+	id := s.seqSA.Add(1)
 	s.mu.Lock()
 	s.sas[id] = &memSA{id: id, rawObjectID: rawObjectID, namespaceID: namespaceID, snapshotID: snapshotID, name: name}
 	s.mu.Unlock()
 	return id, nil
 }
 
-func (s *Store) CreateWorkload(_ context.Context, rawObjectID, snapshotID, namespaceID, serviceAccountID int64, kind, name string) (int64, error) {
-	id := s.nextID()
+func (s *Store) CreateWorkload(_ context.Context, rawObjectID, snapshotID, namespaceID, serviceAccountID int64, kind, name string, images []string) (int64, error) {
+	id := s.seqWorkload.Add(1)
 	s.mu.Lock()
-	s.workloads[id] = &memWorkload{id: id, rawObjectID: rawObjectID, snapshotID: snapshotID, namespaceID: namespaceID, saID: serviceAccountID, kind: kind, name: name}
+	s.workloads[id] = &memWorkload{id: id, rawObjectID: rawObjectID, snapshotID: snapshotID, namespaceID: namespaceID, saID: serviceAccountID, kind: kind, name: name, images: images}
 	s.mu.Unlock()
 	return id, nil
 }
 
 func (s *Store) CreateService(_ context.Context, rawObjectID, snapshotID, namespaceID int64, name, svcType string) (int64, error) {
-	id := s.nextID()
+	id := s.seqService.Add(1)
 	s.mu.Lock()
 	s.services[id] = &memService{id: id, rawObjectID: rawObjectID, snapshotID: snapshotID, namespaceID: namespaceID, name: name, svcType: svcType}
 	s.mu.Unlock()
@@ -357,7 +372,7 @@ func (s *Store) CreateServiceWorkloadMatch(_ context.Context, serviceID, workloa
 }
 
 func (s *Store) CreateAuthPolicy(_ context.Context, rawObjectID, snapshotID, namespaceID int64, name, action, parseStatus string) (int64, error) {
-	id := s.nextID()
+	id := s.seqAuthPol.Add(1)
 	s.mu.Lock()
 	s.authPols[id] = &memAuthPolicy{id: id, rawObjectID: rawObjectID, snapshotID: snapshotID, namespaceID: namespaceID, name: name, action: action, parseStatus: parseStatus}
 	s.mu.Unlock()
@@ -365,7 +380,7 @@ func (s *Store) CreateAuthPolicy(_ context.Context, rawObjectID, snapshotID, nam
 }
 
 func (s *Store) CreateAuthPolicyRule(_ context.Context, policyID int64, ruleIndex int) (int64, error) {
-	id := s.nextID()
+	id := s.seqAuthRule.Add(1)
 	s.mu.Lock()
 	s.authRules[id] = &memAuthRule{id: id, policyID: policyID, ruleIdx: ruleIndex}
 	s.mu.Unlock()
@@ -373,7 +388,7 @@ func (s *Store) CreateAuthPolicyRule(_ context.Context, policyID int64, ruleInde
 }
 
 func (s *Store) CreateAuthPolicySource(_ context.Context, ruleID int64, fromIndex int, principalRaw string, sourceNSID, sourceSAID int64) error {
-	id := s.nextID()
+	id := s.seqAuthSrc.Add(1)
 	s.mu.Lock()
 	s.authSrcs[id] = &memAuthSource{id: id, ruleID: ruleID, fromIndex: fromIndex, principalRaw: principalRaw, nsID: sourceNSID, saID: sourceSAID}
 	s.mu.Unlock()
@@ -381,7 +396,7 @@ func (s *Store) CreateAuthPolicySource(_ context.Context, ruleID int64, fromInde
 }
 
 func (s *Store) CreatePeerAuth(_ context.Context, rawObjectID, snapshotID, namespaceID int64, name, mode, scope string) (int64, error) {
-	id := s.nextID()
+	id := s.seqPeerAuth.Add(1)
 	s.mu.Lock()
 	s.peerAuths[id] = &memPeerAuth{id: id, rawObjectID: rawObjectID, snapshotID: snapshotID, namespaceID: namespaceID, name: name, mode: mode, scope: scope}
 	s.mu.Unlock()
@@ -468,6 +483,7 @@ func (s *Store) GetNormalizedSnapshot(_ context.Context, snapshotID int64) (*mod
 			Kind:             w.kind,
 			Name:             w.name,
 			Labels:           labelsByRaw(w.rawObjectID, "POD_TEMPLATE"),
+			Images:           w.images,
 		})
 	}
 
@@ -576,7 +592,7 @@ func (s *Store) GetNormalizedSnapshot(_ context.Context, snapshotID int64) (*mod
 // ---- analysis runs ----
 
 func (s *Store) CreateRun(_ context.Context, snapshotID int64, scope string) (int64, error) {
-	id := s.nextID()
+	id := s.seqRun.Add(1)
 	r := &model.AnalysisRun{ID: id, SnapshotID: snapshotID, Scope: scope, Status: model.RunPending}
 	s.mu.Lock()
 	s.runs[id] = r
@@ -623,7 +639,7 @@ func (s *Store) SaveEdges(_ context.Context, runID int64, edges []model.AllowedE
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, e := range edges {
-		id := s.nextID()
+		id := s.seqEdge.Add(1)
 		edges[i].ID = id
 		cp := e
 		cp.ID = id

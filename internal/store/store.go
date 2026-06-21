@@ -39,7 +39,7 @@ type DB interface {
 	UpsertKV(ctx context.Context, key, value string) (int64, error)
 	CreateNamespace(ctx context.Context, rawObjectID, snapshotID int64, name string) (int64, error)
 	CreateServiceAccount(ctx context.Context, rawObjectID, namespaceID, snapshotID int64, name string) (int64, error)
-	CreateWorkload(ctx context.Context, rawObjectID, snapshotID, namespaceID, serviceAccountID int64, kind, name string) (int64, error)
+	CreateWorkload(ctx context.Context, rawObjectID, snapshotID, namespaceID, serviceAccountID int64, kind, name string, images []string) (int64, error)
 	CreateService(ctx context.Context, rawObjectID, snapshotID, namespaceID int64, name, svcType string) (int64, error)
 	CreateServicePort(ctx context.Context, serviceID int64, p model.ServicePort) error
 	// AddObjectLabel привязывает kv к объекту с указанным scope (METADATA / POD_TEMPLATE).

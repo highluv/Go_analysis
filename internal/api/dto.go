@@ -88,15 +88,18 @@ type servicePortDTO struct {
 }
 
 type workloadServiceDTO struct {
-	Name  string           `json:"name"` // ns/name
-	Type  string           `json:"type,omitempty"`
-	Ports []servicePortDTO `json:"ports"`
+	Name     string            `json:"name"` // ns/name
+	Type     string            `json:"type,omitempty"`
+	Ports    []servicePortDTO  `json:"ports"`
+	Selector map[string]string `json:"selector,omitempty"`
 }
 
 type workloadInfoDTO struct {
 	Name           string               `json:"name"` // ns/name
 	Kind           string               `json:"kind"`
 	ServiceAccount string               `json:"serviceAccount"` // ns/name
+	Labels         map[string]string    `json:"labels,omitempty"`
+	Images         []string             `json:"images,omitempty"`
 	Services       []workloadServiceDTO `json:"services"`
 }
 
@@ -135,15 +138,18 @@ func toWorkloadInfoList(ns *model.NormalizedSnapshot) []workloadInfoDTO {
 				})
 			}
 			svcs = append(svcs, workloadServiceDTO{
-				Name:  nsName[svc.NamespaceID] + "/" + svc.Name,
-				Type:  svc.Type,
-				Ports: ports,
+				Name:     nsName[svc.NamespaceID] + "/" + svc.Name,
+				Type:     svc.Type,
+				Ports:    ports,
+				Selector: svc.Selector,
 			})
 		}
 		out = append(out, workloadInfoDTO{
 			Name:           wlName,
 			Kind:           w.Kind,
 			ServiceAccount: saName[w.ServiceAccountID],
+			Labels:         w.Labels,
+			Images:         w.Images,
 			Services:       svcs,
 		})
 	}

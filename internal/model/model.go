@@ -97,6 +97,8 @@ type Workload struct {
 	Name             string
 	// Labels — spec.template.metadata.labels контроллера (по ним матчит Service selector).
 	Labels map[string]string
+	// Images — образы контейнеров (spec.template.spec.containers[].image).
+	Images []string
 }
 
 type ServicePort struct {
