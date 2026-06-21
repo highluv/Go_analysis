@@ -68,3 +68,106 @@ spec:
 # --- frontend: ПОЛИТИКИ НЕТ намеренно ----------------------------------------
 # Отсутствие ALLOW => к frontend разрешено всё (любой -> frontend = РАЗРЕШЕНО).
 # Это и есть проверяемая ветка default-allow. Не добавлять сюда политику.
+---
+# ============================================================================
+#  namespace: monitoring
+# ============================================================================
+
+# --- grafana: разрешаем ТОЛЬКО prometheus (тот же ns) -----------------------
+# Ожидаемые следствия оракула:
+#   prometheus (monitoring) -> grafana = РАЗРЕШЕНО
+#   любой другой            -> grafana = ЗАПРЕЩЕНО (default-deny)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: grafana-allow-prometheus
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: grafana
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/monitoring/sa/prometheus-sa
+
+# --- prometheus: ПОЛИТИКИ НЕТ -----------------------------------------------
+# prometheus — скрейпер; он сам ходит к endpoints, к нему никто не обращается.
+# default-allow: любой -> prometheus = РАЗРЕШЕНО.
+---
+# ============================================================================
+#  namespace: infra
+# ============================================================================
+
+# --- cache: разрешаем ТОЛЬКО gateway (тот же ns) ----------------------------
+# Ожидаемые следствия оракула:
+#   gateway (infra) -> cache = РАЗРЕШЕНО
+#   любой другой    -> cache = ЗАПРЕЩЕНО (default-deny)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: cache-allow-gateway
+  namespace: infra
+spec:
+  selector:
+    matchLabels:
+      app: cache
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/infra/sa/gateway-sa
+
+# --- gateway: ПОЛИТИКИ НЕТ --------------------------------------------------
+# gateway — публичная точка входа; default-allow.
+---
+# ============================================================================
+#  namespace: data
+# ============================================================================
+
+# --- processor: разрешаем ТОЛЬКО gateway из infra (кросс-ns) ----------------
+# Ожидаемые следствия оракула:
+#   infra/gateway -> data/processor = РАЗРЕШЕНО  (кросс-ns principal)
+#   всё остальное -> data/processor = ЗАПРЕЩЕНО  (default-deny)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: processor-allow-gateway
+  namespace: data
+spec:
+  selector:
+    matchLabels:
+      app: processor
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/infra/sa/gateway-sa
+---
+# --- warehouse: разрешаем processor (тот же ns) И analytics (кросс-ns) ------
+# Два principal в одном списке => ИЛИ.
+# Ожидаемые следствия оракула:
+#   data/processor       -> data/warehouse     = РАЗРЕШЕНО
+#   external/analytics   -> data/warehouse     = РАЗРЕШЕНО  (кросс-ns)
+#   infra/gateway        -> data/warehouse     = ЗАПРЕЩЕНО  (не в списке)
+#   shop/orders          -> data/warehouse     = ЗАПРЕЩЕНО  (не в списке)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: warehouse-allow-processor-analytics
+  namespace: data
+spec:
+  selector:
+    matchLabels:
+      app: warehouse
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/data/sa/processor-sa
+              - cluster.local/ns/external/sa/analytics-sa

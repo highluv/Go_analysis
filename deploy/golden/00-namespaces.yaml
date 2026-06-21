@@ -17,14 +17,32 @@ metadata:
   name: shop
   labels:
     istio-injection: enabled    # <-- включаем инжект sidecar в этот namespace.
-    # Альтернатива (revision-based, для канареечных апгрейдов Istio):
-    #   istio.io/rev: <revision>
-    # Классическая метка istio-injection=enabled работает с дефолтной
-    # ревизией и для курсовой проще.
+    # Альтернатива (revision-based, для канареечных апгрейдов Istio)
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: external
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infra
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
   labels:
     istio-injection: enabled
