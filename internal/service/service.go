@@ -3,9 +3,10 @@
 // связывая их с чистым ядром normalize/analyze.
 //
 // Ровно здесь живёт различие Snapshot vs AnalysisRun:
-//   Collect — собрать состояние ВСЕГО кластера в момент времени (граница консистентности).
-//   Analyze — вычислить граф для выбранной области поверх уже готового снапшота
-//             (один снапшот переиспользуется многими независимыми run без пересбора).
+//
+//	Collect — собрать состояние ВСЕГО кластера в момент времени (граница консистентности).
+//	Analyze — вычислить граф для выбранной области поверх уже готового снапшота
+//	          (один снапшот переиспользуется многими независимыми run без пересбора).
 package service
 
 import (
@@ -15,11 +16,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/highluv/go-analysis/internal/analyze"
-	"github.com/highluv/go-analysis/internal/collect"
-	"github.com/highluv/go-analysis/internal/model"
-	"github.com/highluv/go-analysis/internal/normalize"
-	"github.com/highluv/go-analysis/internal/store"
+	"github.com/highluv/Go_analysis/internal/analyze"
+	"github.com/highluv/Go_analysis/internal/collect"
+	"github.com/highluv/Go_analysis/internal/model"
+	"github.com/highluv/Go_analysis/internal/normalize"
+	"github.com/highluv/Go_analysis/internal/store"
 )
 
 type Service struct {

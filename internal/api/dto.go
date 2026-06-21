@@ -1,6 +1,6 @@
 package api
 
-import "github.com/highluv/go-analysis/internal/model"
+import "github.com/highluv/Go_analysis/internal/model"
 
 // ---------- запросы ----------
 
@@ -59,13 +59,13 @@ type evidenceDTO struct {
 
 // edgeDTO — ребро в человекочитаемом виде (имена вместо ID), с доказательствами.
 type edgeDTO struct {
-	Source    string        `json:"source"`    // ns/name
-	Dest      string        `json:"dest"`      // ns/name
-	ViaService string       `json:"viaService"` // ns/name
-	Port      int           `json:"port"`
-	Protocol  string        `json:"protocol"`
-	Transport string        `json:"transport"`
-	Evidence  []evidenceDTO `json:"evidence"`
+	Source     string        `json:"source"`     // ns/name
+	Dest       string        `json:"dest"`       // ns/name
+	ViaService string        `json:"viaService"` // ns/name
+	Port       int           `json:"port"`
+	Protocol   string        `json:"protocol"`
+	Transport  string        `json:"transport"`
+	Evidence   []evidenceDTO `json:"evidence"`
 }
 
 type edgesResponse struct {

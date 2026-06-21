@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/highluv/go-analysis/internal/model"
-	"github.com/highluv/go-analysis/internal/store"
+	"github.com/highluv/Go_analysis/internal/model"
+	"github.com/highluv/Go_analysis/internal/store"
 )
 
 // ---- внутренние строки хранилища ----
@@ -139,12 +139,12 @@ type Store struct {
 
 	// derived
 	runs    map[int64]*model.AnalysisRun
-	edges   map[int64]*model.AllowedEdge         // edgeID → edge
-	runEdge map[int64][]int64                    // runID → edgeIDs
-	evs     map[int64][]model.Evidence           // edgeID → evidences
+	edges   map[int64]*model.AllowedEdge // edgeID → edge
+	runEdge map[int64][]int64            // runID → edgeIDs
+	evs     map[int64][]model.Evidence   // edgeID → evidences
 }
 
-var _ store.DB   = (*Store)(nil)
+var _ store.DB = (*Store)(nil)
 var _ store.Blob = (*Store)(nil)
 
 // New создаёт пустое хранилище.

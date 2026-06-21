@@ -15,19 +15,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/highluv/go-analysis/internal/collect"
-	"github.com/highluv/go-analysis/internal/model"
-	"github.com/highluv/go-analysis/internal/service"
-	"github.com/highluv/go-analysis/internal/store"
+	"github.com/highluv/Go_analysis/internal/collect"
+	"github.com/highluv/Go_analysis/internal/model"
+	"github.com/highluv/Go_analysis/internal/service"
+	"github.com/highluv/Go_analysis/internal/store"
 )
 
 // ReaderFactory создаёт источник сбора на каждый Collect-запрос (cluster или dir — выбирается в main).
 type ReaderFactory func() (collect.Reader, error)
 
 type Server struct {
-	svc        *service.Service
-	db         store.DB
-	newReader  ReaderFactory
+	svc       *service.Service
+	db        store.DB
+	newReader ReaderFactory
 }
 
 func NewServer(svc *service.Service, db store.DB, newReader ReaderFactory) *Server {

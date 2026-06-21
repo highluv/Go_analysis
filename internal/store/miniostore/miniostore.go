@@ -13,7 +13,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/highluv/go-analysis/internal/store"
+	"github.com/highluv/Go_analysis/internal/store"
 )
 
 type Blob struct {
