@@ -1,6 +1,6 @@
 package analyze
 
-import "github.com/Go-analysis/internal/model"
+import "github.com/highluv/Go_analysis/internal/model"
 
 // index — заранее построенные карты по нормализованному снапшоту.
 // Цель: O(1)-доступ внутри Inbound, чтобы при обходе всех destination'ов

@@ -24,16 +24,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Go-analysis/internal/api"
-	"github.com/Go-analysis/internal/collect"
-	"github.com/Go-analysis/internal/collect/fsdir"
-	"github.com/Go-analysis/internal/collect/kube"
-	"github.com/Go-analysis/internal/config"
-	"github.com/Go-analysis/internal/service"
-	"github.com/Go-analysis/internal/store"
-	"github.com/Go-analysis/internal/store/memory"
-	"github.com/Go-analysis/internal/store/miniostore"
-	"github.com/Go-analysis/internal/store/postgres"
+	"github.com/highluv/Go_analysis/internal/api"
+	"github.com/highluv/Go_analysis/internal/collect"
+	"github.com/highluv/Go_analysis/internal/collect/fsdir"
+	"github.com/highluv/Go_analysis/internal/collect/kube"
+	"github.com/highluv/Go_analysis/internal/config"
+	"github.com/highluv/Go_analysis/internal/service"
+	"github.com/highluv/Go_analysis/internal/store"
+	"github.com/highluv/Go_analysis/internal/store/memory"
+	"github.com/highluv/Go_analysis/internal/store/miniostore"
+	"github.com/highluv/Go_analysis/internal/store/postgres"
 )
 
 func main() {
