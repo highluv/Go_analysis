@@ -15,7 +15,7 @@ import (
 
 	sigsyaml "sigs.k8s.io/yaml"
 
-	"github.com/yourname/acg/internal/collect"
+	"github.com/highluv/go-analysis/internal/collect"
 )
 
 // Reader читает манифесты из директории на диске.

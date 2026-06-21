@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/yourname/acg/internal/model"
-	"github.com/yourname/acg/internal/store"
+	"github.com/highluv/go-analysis/internal/model"
+	"github.com/highluv/go-analysis/internal/store"
 )
 
 // ---- внутренние строки хранилища ----

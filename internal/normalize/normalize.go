@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yourname/acg/internal/collect"
-	"github.com/yourname/acg/internal/model"
+	"github.com/highluv/go-analysis/internal/collect"
+	"github.com/highluv/go-analysis/internal/model"
 )
 
 const defaultServiceAccount = "default"

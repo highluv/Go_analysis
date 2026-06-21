@@ -24,16 +24,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourname/acg/internal/api"
-	"github.com/yourname/acg/internal/collect"
-	"github.com/yourname/acg/internal/collect/fsdir"
-	"github.com/yourname/acg/internal/collect/kube"
-	"github.com/yourname/acg/internal/config"
-	"github.com/yourname/acg/internal/service"
-	"github.com/yourname/acg/internal/store"
-	"github.com/yourname/acg/internal/store/memory"
-	"github.com/yourname/acg/internal/store/miniostore"
-	"github.com/yourname/acg/internal/store/postgres"
+	"github.com/highluv/go-analysis/internal/api"
+	"github.com/highluv/go-analysis/internal/collect"
+	"github.com/highluv/go-analysis/internal/collect/fsdir"
+	"github.com/highluv/go-analysis/internal/collect/kube"
+	"github.com/highluv/go-analysis/internal/config"
+	"github.com/highluv/go-analysis/internal/service"
+	"github.com/highluv/go-analysis/internal/store"
+	"github.com/highluv/go-analysis/internal/store/memory"
+	"github.com/highluv/go-analysis/internal/store/miniostore"
+	"github.com/highluv/go-analysis/internal/store/postgres"
 )
 
 func main() {

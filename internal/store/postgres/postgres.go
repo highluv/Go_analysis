@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/yourname/acg/internal/model"
-	"github.com/yourname/acg/internal/store"
+	"github.com/highluv/go-analysis/internal/model"
+	"github.com/highluv/go-analysis/internal/store"
 )
 
 type DB struct{ pool *pgxpool.Pool }

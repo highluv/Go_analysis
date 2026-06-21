@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yourname/acg/internal/analyze"
-	"github.com/yourname/acg/internal/collect"
-	"github.com/yourname/acg/internal/model"
-	"github.com/yourname/acg/internal/normalize"
-	"github.com/yourname/acg/internal/store"
+	"github.com/highluv/go-analysis/internal/analyze"
+	"github.com/highluv/go-analysis/internal/collect"
+	"github.com/highluv/go-analysis/internal/model"
+	"github.com/highluv/go-analysis/internal/normalize"
+	"github.com/highluv/go-analysis/internal/store"
 )
 
 type Service struct {

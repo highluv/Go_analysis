@@ -11,7 +11,7 @@ package store
 import (
 	"context"
 
-	"github.com/yourname/acg/internal/model"
+	"github.com/highluv/go-analysis/internal/model"
 )
 
 // Blob — хранилище сырых байтов манифестов по ключу.

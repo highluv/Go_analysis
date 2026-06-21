@@ -1,6 +1,6 @@
 package api
 
-import "github.com/yourname/acg/internal/model"
+import "github.com/highluv/go-analysis/internal/model"
 
 // ---------- запросы ----------
 

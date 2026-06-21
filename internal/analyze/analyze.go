@@ -8,7 +8,7 @@ package analyze
 import (
 	"sort"
 
-	"github.com/yourname/acg/internal/model"
+	"github.com/highluv/go-analysis/internal/model"
 )
 
 // Engine держит индексы по снапшоту, чтобы не пересобирать их на каждый destination.

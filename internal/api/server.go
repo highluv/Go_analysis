@@ -15,10 +15,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/yourname/acg/internal/collect"
-	"github.com/yourname/acg/internal/model"
-	"github.com/yourname/acg/internal/service"
-	"github.com/yourname/acg/internal/store"
+	"github.com/highluv/go-analysis/internal/collect"
+	"github.com/highluv/go-analysis/internal/model"
+	"github.com/highluv/go-analysis/internal/service"
+	"github.com/highluv/go-analysis/internal/store"
 )
 
 // ReaderFactory создаёт источник сбора на каждый Collect-запрос (cluster или dir — выбирается в main).

@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/yourname/acg/internal/collect"
+	"github.com/highluv/go-analysis/internal/collect"
 )
 
 // Reader держит динамический клиент к кластеру.
