@@ -501,7 +501,7 @@ function buildGraph(edgesAll, wlMapAll) {
           'border-color':       'data(color)',
           'border-width':       1.5,
           'border-style':       'dashed',
-          'padding':            '14px',
+          'padding':            '10px',
           'label':              '',
         },
       },
@@ -579,12 +579,18 @@ function buildGraph(edgesAll, wlMapAll) {
       },
     ],
     layout: {
-      name:    'cose',
-      padding:  50,
-      // Spring edges (svc→wl inside compound) stay tight; flow edges between compounds breathe
-      idealEdgeLength: edge => edge.data('edgeType') === 'spring' ? 50 : 130,
-      nodeOverlap:     20,
-      animate:         false,
+      name:         'cose',
+      animate:       false,
+      padding:       60,
+      // Pull compound children (svc △ + workload ○) tightly together
+      nestingFactor: 0.1,
+      // Strong repulsion keeps different workload groups from overlapping
+      nodeRepulsion: 2048,
+      // Short spring edges → service stays right next to its workload
+      idealEdgeLength: edge => edge.data('edgeType') === 'spring' ? 10 : 15,
+      nodeOverlap:   4,
+      gravity:       2,
+      numIter:       1500,
     },
   });
 
