@@ -144,7 +144,15 @@ async function renderSnapshots(app) {
 
 // ─── Page: Snapshot detail ────────────────────────────────────────────────
 async function renderSnapshot(app, id) {
-  const [snap, runs] = await Promise.all([api.getSnapshot(id), api.listRuns(id)]);
+  const [snap, runs, workloads] = await Promise.all([api.getSnapshot(id), api.listRuns(id), api.getWorkloads(id)]);
+
+  const namespaces = [...new Set(workloads.map(w => {
+    const i = w.name.indexOf('/');
+    return i >= 0 ? w.name.slice(0, i) : w.name;
+  }).filter(Boolean))].sort();
+  const nsOptions = namespaces
+    .map(ns => `<option value="namespace:${esc(ns)}">namespace:${esc(ns)}</option>`)
+    .join('');
 
   app.innerHTML = `
     ${breadcrumb([['#/', 'Снапшоты'], [null, `${esc(snap.name)} #${snap.id}`]])}
@@ -170,8 +178,7 @@ async function renderSnapshot(app, id) {
               <label class="form-label mb-1 small">Область (scope)</label>
               <select class="form-select form-select-sm" id="scope-sel" style="min-width:200px">
                 <option value="cluster">cluster</option>
-                <option value="namespace:shop">namespace:shop</option>
-                <option value="namespace:external">namespace:external</option>
+                ${nsOptions}
                 <option value="__custom">Указать вручную...</option>
               </select>
             </div>
